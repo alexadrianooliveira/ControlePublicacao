@@ -471,6 +471,34 @@ class FileSelector:
     def _clear_structure(self):
         self.var_structure_file.set("")
 
+    def _is_backup_mode(self):
+        """Retorna True se a aba Estrutura de arquivos está ativa e um JSON foi selecionado."""
+        active_tab = self.notebook_filters.index(self.notebook_filters.select())
+        return active_tab == 1 and self.var_structure_file.get().strip()
+
+    def _load_structure_file(self, filepath):
+        """Lê e valida o JSON de estrutura. Retorna lista de files ou None se inválido."""
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            Messagebox.show_error(f"Erro ao ler arquivo de estrutura:\n{e}", title="Erro")
+            return None
+
+        if not isinstance(data.get("files"), list):
+            Messagebox.show_error("Arquivo JSON inválido: chave 'files' ausente ou não é uma lista.", title="Erro")
+            return None
+
+        for i, entry in enumerate(data["files"]):
+            if not isinstance(entry, dict) or "name" not in entry or "folder" not in entry:
+                Messagebox.show_error(
+                    f"Arquivo JSON inválido: entrada {i} deve ter 'name' e 'folder'.",
+                    title="Erro"
+                )
+                return None
+
+        return data["files"]
+
     def _parse_datetime(self):
         try:
             date_str = self.date_entry.entry.get().strip()
@@ -574,6 +602,52 @@ class FileSelector:
         self._add_to_history(source, "source")
         self._save_config()
 
+        # --- Modo backup (estrutura de arquivos) ---
+        if self._is_backup_mode():
+            structure_file = self.var_structure_file.get().strip()
+            file_list = self._load_structure_file(structure_file)
+            if file_list is None:
+                return
+
+            self._clear_tree()
+            self.scanning = True
+            self.sort_col = None
+            self.sort_reverse = False
+            self._log(f"Modo backup: buscando {len(file_list)} arquivo(s) em: {source}")
+
+            def scan_structure():
+                found = []
+                not_found = 0
+                for entry in file_list:
+                    if not self.scanning:
+                        break
+                    filepath = os.path.normpath(os.path.join(source, entry["folder"], entry["name"]))
+                    try:
+                        stat = os.stat(filepath)
+                        mtime = datetime.fromtimestamp(stat.st_mtime)
+                        found.append({
+                            "name": entry["name"],
+                            "folder": entry["folder"],
+                            "full_path": filepath,
+                            "modified": mtime,
+                            "size": stat.st_size,
+                            "selected": True
+                        })
+                    except (FileNotFoundError, OSError):
+                        not_found += 1
+                        name_display = f"{entry['folder']}\\{entry['name']}"
+                        self.root.after(0, lambda n=name_display: self._log(f"Não encontrado: {n}"))
+
+                if not_found:
+                    self.root.after(0, lambda nf=not_found: self._log(
+                        f"Atenção: {nf} arquivo(s) não encontrado(s) na origem"
+                    ))
+                self.root.after(0, lambda: self._populate_tree(found))
+
+            threading.Thread(target=scan_structure, daemon=True).start()
+            return
+
+        # --- Modo normal (filtros) ---
         cutoff = self._parse_datetime()
         if cutoff is None:
             return
