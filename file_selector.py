@@ -172,8 +172,15 @@ class FileSelector:
         card_filters = ttk.Labelframe(main, text="  Filtros  ", padding=10, bootstyle="info")
         card_filters.pack(fill=X, pady=(0, 8))
 
+        self.notebook_filters = ttk.Notebook(card_filters, bootstyle="info")
+        self.notebook_filters.pack(fill=X)
+
+        # --- Aba Filtros ---
+        tab_filters = ttk.Frame(self.notebook_filters, padding=8)
+        self.notebook_filters.add(tab_filters, text="  Filtros  ")
+
         # Linha 1: Extensões
-        row_ext = ttk.Frame(card_filters)
+        row_ext = ttk.Frame(tab_filters)
         row_ext.pack(fill=X, pady=(0, 6))
 
         ttk.Label(row_ext, text="Extensões:", font=("-size", 9, "-weight", "bold"), width=10).pack(side=LEFT)
@@ -189,7 +196,7 @@ class FileSelector:
         self._load_ext_field()
 
         # Linha 2: Pastas
-        row_folder = ttk.Frame(card_filters)
+        row_folder = ttk.Frame(tab_filters)
         row_folder.pack(fill=X, pady=(0, 6))
 
         ttk.Label(row_folder, text="Pastas:", font=("-size", 9, "-weight", "bold"), width=10).pack(side=LEFT)
@@ -205,7 +212,7 @@ class FileSelector:
         self._load_folder_field()
 
         # Linha 3: Modificados a partir de
-        row_date = ttk.Frame(card_filters)
+        row_date = ttk.Frame(tab_filters)
         row_date.pack(fill=X)
 
         ttk.Label(row_date, text="A partir de:", font=("-size", 9, "-weight", "bold"), width=10).pack(side=LEFT)
@@ -219,6 +226,23 @@ class FileSelector:
         ttk.Label(row_date, text=":", font=("-size", 12, "-weight", "bold")).pack(side=LEFT)
         ttk.Spinbox(row_date, from_=0, to=59, width=3, textvariable=self.var_minute,
                      format="%02.0f", wrap=True, bootstyle="info").pack(side=LEFT)
+
+        # --- Aba Estrutura de arquivos ---
+        tab_structure = ttk.Frame(self.notebook_filters, padding=8)
+        self.notebook_filters.add(tab_structure, text="  Estrutura de arquivos  ")
+
+        row_structure = ttk.Frame(tab_structure)
+        row_structure.pack(fill=X)
+
+        ttk.Label(row_structure, text="Arquivo:", font=("-size", 9, "-weight", "bold"), width=10).pack(side=LEFT)
+        self.var_structure_file = ttk.StringVar()
+        self.entry_structure = ttk.Entry(row_structure, textvariable=self.var_structure_file,
+                                          font=("-size", 9), state="readonly")
+        self.entry_structure.pack(side=LEFT, fill=X, expand=True, padx=(0, 8))
+        ttk.Button(row_structure, text="Procurar...", command=self._browse_structure,
+                   bootstyle="info-outline").pack(side=LEFT, padx=(0, 4))
+        ttk.Button(row_structure, text="Limpar", command=self._clear_structure,
+                   bootstyle="warning-outline").pack(side=LEFT)
 
         # === BOTÕES DE AÇÃO ===
         frame_actions = ttk.Frame(main)
@@ -435,6 +459,17 @@ class FileSelector:
             source = self.var_path.get().strip()
             if source:
                 self._save_folder_link(source, folder)
+
+    def _browse_structure(self):
+        filepath = filedialog.askopenfilename(
+            title="Selecionar arquivo de estrutura",
+            filetypes=[("JSON", "*.json"), ("Todos", "*.*")]
+        )
+        if filepath:
+            self.var_structure_file.set(filepath)
+
+    def _clear_structure(self):
+        self.var_structure_file.set("")
 
     def _parse_datetime(self):
         try:
