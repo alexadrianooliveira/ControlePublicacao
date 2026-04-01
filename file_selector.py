@@ -681,17 +681,38 @@ class FileSelector:
 
     # --- Exportação ---
 
+    def _get_export_folders(self, dest):
+        """Retorna lista de pastas de exportação (com ou sem prefixo [ULTIMO]_), ordenadas pelo timestamp."""
+        pattern = re.compile(r'^(\[ULTIMO\]_)?(\d{8}_\d{6})$')
+        folders = []
+        try:
+            for d in os.listdir(dest):
+                if os.path.isdir(os.path.join(dest, d)) and pattern.match(d):
+                    folders.append(d)
+            folders.sort(key=lambda f: pattern.match(f).group(2))
+        except Exception:
+            pass
+        return folders
+
+    def _remove_ultimo_prefix(self, dest):
+        """Remove o prefixo [ULTIMO]_ da pasta que o possui."""
+        for d in self._get_export_folders(dest):
+            if d.startswith("[ULTIMO]_"):
+                old_path = os.path.join(dest, d)
+                new_name = d.replace("[ULTIMO]_", "", 1)
+                new_path = os.path.join(dest, new_name)
+                try:
+                    os.rename(old_path, new_path)
+                    self._log(f"Prefixo [ULTIMO] removido: {d} → {new_name}")
+                except Exception as e:
+                    self._log(f"Erro ao remover prefixo [ULTIMO]: {e}")
+
     def _cleanup_old_export_folders(self, dest):
         """Remove as pastas de exportação mais antigas, mantendo no máximo max_export_folders."""
-        pattern = re.compile(r'^\d{8}_\d{6}$')
         max_folders = self.cfg.get("max_export_folders", 50)
 
         try:
-            folders = [
-                d for d in os.listdir(dest)
-                if os.path.isdir(os.path.join(dest, d)) and pattern.match(d)
-            ]
-            folders.sort()  # Ordem cronológica pelo nome
+            folders = self._get_export_folders(dest)
 
             # -1 porque vamos criar uma nova pasta logo em seguida
             while len(folders) >= max_folders:
@@ -727,9 +748,13 @@ class FileSelector:
         # Limpar pastas antigas de exportação antes de criar a nova
         self._cleanup_old_export_folders(dest)
 
-        # Criar subpasta com timestamp YYYYMMDD_HHMMSS
+        # Remover prefixo [ULTIMO] da pasta anterior
+        self._remove_ultimo_prefix(dest)
+
+        # Criar subpasta com timestamp YYYYMMDD_HHMMSS e prefixo [ULTIMO]
         timestamp_folder = datetime.now().strftime('%Y%m%d_%H%M%S')
-        dest = os.path.join(dest, timestamp_folder)
+        ultimo_folder = f"[ULTIMO]_{timestamp_folder}"
+        dest = os.path.join(dest, ultimo_folder)
         os.makedirs(dest, exist_ok=True)
 
         gen_structure = self.var_gen_structure.get()
@@ -807,6 +832,8 @@ class FileSelector:
                 except Exception as e:
                     self.root.after(0, lambda: self._log(f"Erro ao gerar txt: {e}"))
 
+            self._generate_folder_structure_json(dest, source, selected)
+
             mode = "compactado(s)" if export_zip else "copiado(s)"
             self.root.after(0, lambda: self._log(f"Exportação: {copied} {mode}, {errors} erro(s) → {dest}"))
             self.root.after(0, lambda: Messagebox.show_info(
@@ -815,6 +842,24 @@ class FileSelector:
             ))
 
         threading.Thread(target=do_export, daemon=True).start()
+
+    def _generate_folder_structure_json(self, dest, source, selected):
+        """Gera [folder_structure].json na pasta de exportação."""
+        try:
+            structure = {
+                "source": source,
+                "exported_at": datetime.now().isoformat(timespec="seconds"),
+                "files": [
+                    {"name": f["name"], "folder": f["folder"]}
+                    for f in selected
+                ]
+            }
+            json_path = os.path.join(dest, "[folder_structure].json")
+            with open(json_path, "w", encoding="utf-8") as jf:
+                json.dump(structure, jf, ensure_ascii=False, indent=2)
+            self.root.after(0, lambda: self._log("Estrutura de arquivos salva: [folder_structure].json"))
+        except Exception as e:
+            self.root.after(0, lambda: self._log(f"Erro ao gerar [folder_structure].json: {e}"))
 
     def _set_progress(self, value):
         self.progress["value"] = value
