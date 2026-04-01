@@ -31,9 +31,9 @@ Gerado automaticamente dentro da pasta `[ULTIMO]_YYYYMMDD_HHMMSS` ao final de ca
 }
 ```
 
-- `source`: pasta de origem usada na exportacao
+- `source`: pasta de origem usada na exportacao (campo informativo — nao e usado para validacao, pois no servidor a origem sera diferente)
 - `exported_at`: timestamp ISO da exportacao
-- `files`: lista com `name` (nome do arquivo) e `folder` (caminho relativo da pasta, igual ao campo "pasta" da Treeview)
+- `files`: lista com `name` (nome do arquivo) e `folder` (caminho relativo da pasta, igual ao campo "pasta" da Treeview). Quando o arquivo esta na raiz da origem, `folder` sera `"."`
 
 O JSON e gerado DEPOIS da copia/zip dos arquivos, dentro da funcao `do_export()` na thread de exportacao.
 
@@ -60,12 +60,12 @@ structure_file = self.var_structure_file.get().strip()
 ```
 
 **Se a aba ativa for "Estrutura de arquivos" E houver um JSON selecionado:**
-- Ler o JSON e extrair a lista de `files`
+- Pular completamente `_parse_datetime()` e todos os filtros de extensao, pasta e data
+- Ler o JSON e validar: deve conter a chave `files` como lista, e cada entry deve ter `name` e `folder`. Se o JSON for invalido ou malformado, exibir `Messagebox.show_error()` com mensagem amigavel e abortar
 - Para cada entry `{ name, folder }`:
-  - Construir o caminho esperado: `os.path.join(source, folder, name)`
+  - Construir o caminho esperado: `os.path.join(source, folder, name)` (funciona corretamente mesmo quando `folder` e `"."`)
   - Se o arquivo existir: adicionar ao `found[]` com os dados reais (stat)
   - Se nao existir: logar `[HH:MM:SS] Nao encontrado: folder\name`
-- Pular completamente os filtros de extensao, pasta e data
 - A populacao da Treeview e o fluxo de exportacao continuam identicos
 
 **Se a aba ativa for "Filtros":**
