@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.egg-info/
+file_selector_config.json
+test_icon.png
