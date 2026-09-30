@@ -791,7 +791,11 @@ class FileSelector:
     # --- Exportação ---
 
     def _get_export_folders(self, dest):
-        """Retorna lista de pastas de exportação (com ou sem prefixo [ULTIMO]_), ordenadas pelo timestamp."""
+        """Retorna lista de pastas de exportação ordenadas pelo timestamp.
+
+        Mantém a regex tolerante ao prefixo legado [ULTIMO]_ para que pastas
+        criadas por versões anteriores ainda sejam contabilizadas na limpeza.
+        """
         pattern = re.compile(r'^(\[ULTIMO\]_)?(\d{8}_\d{6})$')
         folders = []
         try:
@@ -802,19 +806,6 @@ class FileSelector:
         except Exception:
             pass
         return folders
-
-    def _remove_ultimo_prefix(self, dest):
-        """Remove o prefixo [ULTIMO]_ da pasta que o possui."""
-        for d in self._get_export_folders(dest):
-            if d.startswith("[ULTIMO]_"):
-                old_path = os.path.join(dest, d)
-                new_name = d.replace("[ULTIMO]_", "", 1)
-                new_path = os.path.join(dest, new_name)
-                try:
-                    os.rename(old_path, new_path)
-                    self._log(f"Prefixo [ULTIMO] removido: {d} → {new_name}")
-                except Exception as e:
-                    self._log(f"Erro ao remover prefixo [ULTIMO]: {e}")
 
     def _cleanup_old_export_folders(self, dest):
         """Remove as pastas de exportação mais antigas, mantendo no máximo max_export_folders."""
@@ -854,16 +845,13 @@ class FileSelector:
         if source:
             self._save_folder_link(source, dest)
 
+        backup_mode = self._is_backup_mode()
+
         # Limpar pastas antigas de exportação antes de criar a nova
         self._cleanup_old_export_folders(dest)
 
-        # Remover prefixo [ULTIMO] da pasta anterior
-        self._remove_ultimo_prefix(dest)
-
-        # Criar subpasta com timestamp YYYYMMDD_HHMMSS e prefixo [ULTIMO]
         timestamp_folder = datetime.now().strftime('%Y%m%d_%H%M%S')
-        ultimo_folder = f"[ULTIMO]_{timestamp_folder}"
-        dest = os.path.join(dest, ultimo_folder)
+        dest = os.path.join(dest, timestamp_folder)
         os.makedirs(dest, exist_ok=True)
 
         gen_structure = self.var_gen_structure.get()
@@ -941,7 +929,8 @@ class FileSelector:
                 except Exception as e:
                     self.root.after(0, lambda: self._log(f"Erro ao gerar txt: {e}"))
 
-            self._generate_folder_structure_json(dest, source, selected)
+            if not backup_mode:
+                self._generate_folder_structure_json(dest, source, selected)
 
             mode = "compactado(s)" if export_zip else "copiado(s)"
             self.root.after(0, lambda: self._log(f"Exportação: {copied} {mode}, {errors} erro(s) → {dest}"))
